@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bulb Lab</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#10151b;color:#e9eef4}*{box-sizing:border-box}body{margin:0}main{max-width:1200px;margin:auto;padding:32px 24px}h1{font-size:clamp(26px,4vw,42px);margin:8px 0}h2{font-size:19px}p{line-height:1.6;color:#a9b6c4}.eyebrow{color:#f3cd68;font-size:12px;letter-spacing:3px}.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px;margin-top:24px}.panel{background:#19212a;border:1px solid #303c48;border-radius:18px;padding:22px}.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:18px 0}button,input{font:inherit}button{cursor:pointer;background:#293644;color:#edf2f7;border:1px solid #435364;border-radius:9px;padding:9px 13px}button:hover{background:#35485b}button:focus-visible,input:focus-visible{outline:3px solid #70baff;outline-offset:3px}button:disabled{opacity:.4;cursor:default}input[type=number]{width:64px;padding:8px;border:1px solid #435364;border-radius:7px;background:#10151b;color:white}.primary{background:#f3cd68;color:#151a20;border-color:#f3cd68}.stats{display:flex;gap:28px;margin-bottom:18px}.stats strong{font-size:28px;display:block}.stats span{font-size:13px;color:#a9b6c4}.scroll{overflow:auto;padding:5px}.grid{display:grid;gap:6px;width:100%;min-width:var(--min);grid-template-columns:repeat(var(--cols),1fr)}.bulb{padding:0;aspect-ratio:1;border-radius:10px;background:#111820;display:grid;place-items:center;min-width:26px}.bulb:after{content:'';width:55%;height:55%;border-radius:50%;background:#35424f;border:2px solid #4c5d6d}.bulb.on{background:#403b26;border-color:#b99842}.bulb.on:after{background:#ffe185;border-color:#fff0bb;box-shadow:0 0 15px #f5cc6460}.bulb.cross{outline:1px solid #91b0ca;outline-offset:1px}.path{font-family:ui-monospace,monospace;font-size:13px;line-height:1.8;overflow-wrap:anywhere;max-height:180px;overflow:auto;color:#b9cadb}.result{border-top:1px solid #35414d;padding:15px 0}.result p{margin:5px 0;font-size:12px}.result button{font-size:12px;margin:5px 5px 0 0}#notice{min-height:48px;color:#f3cd68;line-height:1.5;margin:14px 0}.small{font-size:12px}#saved{max-height:550px;overflow:auto}.check{font-size:14px;color:#b9cadb}.replay{border:1px solid #5c7d98;border-radius:10px;padding:12px;margin-bottom:16px}footer{margin-top:20px;font-size:12px;color:#889aaa}@media(max-width:850px){.layout{grid-template-columns:1fr}main{padding:22px 14px}.panel{padding:16px}}
+</style>
+<main>
+<div class="eyebrow">INTERACTIVE EXPERIMENT</div><h1>Bulb Lab</h1>
+<p>Click a bulb to toggle its entire row and column. The bulb at the intersection toggles <b>only once</b>.<br>Start with every bulb off. The goal is to turn them all on.</p>
+<div class="layout"><section class="panel">
+<form id="size" class="toolbar"><label>Rows <input id="rows" type="number" min="1" max="30" value="8" required></label><label>Columns <input id="cols" type="number" min="1" max="30" value="8" required></label><button class="primary">New grid</button></form>
+<p class="small">Each dimension can be 1–30. New grid and Reset clear the current attempt; saved results are kept.</p>
+<div class="stats"><div><strong id="moves">0</strong><span>moves</span></div><div><strong id="lit">0 / 64</strong><span>bulbs on</span></div><div><strong id="dimensions">8 × 8</strong><span>grid size</span></div></div>
+<div id="replay" class="replay" hidden><b>Result replay</b><div class="toolbar"><button id="prev">← Previous</button><span id="frame"></span><button id="next">Next →</button><button id="exit">Return to attempt</button></div></div>
+<div class="scroll"><div class="grid" id="grid" aria-label="Bulbs"></div></div>
+<div class="toolbar"><button id="undo">Undo move</button><button id="reset">Reset</button></div>
+<label class="check"><input type="checkbox" id="auto" checked> Automatically start a new attempt after reaching the goal</label>
+<div id="notice" role="status" aria-live="polite"></div>
+<h2>Current path</h2><p class="small">Coordinates: (row, column), starting at 1 in the top-left corner.</p><div class="path" id="path"></div>
+</section><aside class="panel"><h2>Successful attempts <span id="count"></span></h2><p class="small">Saved in this browser. Download a JSON file to keep a separate copy of your results and paths.</p><button id="download">Download all results</button><div id="saved"></div></aside></div>
+<footer>Works offline with no external libraries. Browser storage depends on your settings; downloaded JSON files provide a separate copy.</footer>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id),KEY='bulb-lab-results-v1';
+let rows=8,cols=8,board=[],path=[],completed=false,results=[],view=null,backup=null,storageOK=true;
+try{const raw=JSON.parse(localStorage.getItem(KEY)||'[]');if(Array.isArray(raw))results=raw.filter(x=>Number.isInteger(x.rows)&&x.rows>0&&x.rows<=30&&Number.isInteger(x.cols)&&x.cols>0&&x.cols<=30&&Array.isArray(x.path)&&x.path.every(p=>Array.isArray(p)&&p.length===2&&Number.isInteger(p[0])&&Number.isInteger(p[1])&&p[0]>=1&&p[0]<=x.rows&&p[1]>=1&&p[1]<=x.cols));}catch(e){storageOK=false;}
+function flip(board,rows,cols,r,c){for(let i=0;i<rows;i++)for(let j=0;j<cols;j++)if(i===r||j===c)board[i*cols+j]=!board[i*cols+j];}
+function blank(){board=Array(rows*cols).fill(false);path=[];completed=false;}
+function notice(s){$('notice').textContent=s;}
+function render(){
+ $('moves').textContent=path.length;$('lit').textContent=board.filter(Boolean).length+' / '+board.length;$('dimensions').textContent=rows+' × '+cols;
+ $('grid').style.setProperty('--cols',cols);$('grid').style.setProperty('--min',(cols*32)+'px');$('grid').replaceChildren();
+ board.forEach((on,i)=>{const b=document.createElement('button'),r=Math.floor(i/cols),c=i%cols;b.className='bulb'+(on?' on':'');b.type='button';b.setAttribute('aria-label',`Row ${r+1}, column ${c+1}: ${on?'on':'off'}`);b.setAttribute('aria-pressed',on);b.title=`(${r+1}, ${c+1})`;b.disabled=!!view||completed;b.onclick=()=>play(r,c);b.onmouseenter=()=>highlight(r,c);b.onmouseleave=()=>highlight(-1,-1);$('grid').append(b);});
+ $('path').textContent=path.length?path.map(p=>'('+p.join(', ')+')').join(' → '):'No moves yet.';
+ $('undo').disabled=!path.length||!!view||completed;$('reset').disabled=!!view;$('auto').disabled=!!view;$('size').querySelectorAll('input,button').forEach(e=>e.disabled=!!view);
+ $('replay').hidden=!view;if(view){$('frame').textContent=view.step+' / '+view.result.path.length;$('prev').disabled=view.step===0;$('next').disabled=view.step===view.result.path.length;}
+}
+function highlight(r,c){[...$('grid').children].forEach((b,i)=>b.classList.toggle('cross',r>=0&&(Math.floor(i/cols)===r||i%cols===c)));}
+function play(r,c){if(view||completed)return;flip(board,rows,cols,r,c);path.push([r+1,c+1]);notice('');if(board.every(Boolean)){
+ const result={rows,cols,moves:path.length,path:path.map(p=>[...p]),date:new Date().toISOString()};results.unshift(result);completed=true;
+ try{localStorage.setItem(KEY,JSON.stringify(results));storageOK=true;}catch(e){storageOK=false;}
+ notice(`Goal reached! Moves: ${path.length}. `+(storageOK?'Result saved.':'Could not save to browser storage — download your results as JSON.')+($('auto').checked?' A new attempt has started.':''));renderResults();if($('auto').checked)blank();
+ }render();if(!completed&&!view){$('grid').children[r*cols+c].focus({preventScroll:true});}}
+function renderResults(){
+ $('count').textContent='('+results.length+')';$('download').disabled=!results.length;$('saved').replaceChildren();if(!results.length){const p=document.createElement('p');p.textContent='Paths that turn every bulb on will appear here.';$('saved').append(p);}
+ results.forEach((x,i)=>{const el=document.createElement('div');el.className='result';const title=document.createElement('b');title.textContent=`${x.rows} × ${x.cols} · ${x.path.length} moves`;const date=document.createElement('p');date.textContent=new Date(x.date).toLocaleString('en-GB');const p=document.createElement('div');p.className='path';p.textContent=x.path.map(p=>'('+p.join(', ')+')').join(' → ');const show=document.createElement('button');show.textContent='Replay step by step';show.onclick=()=>startView(i);const save=document.createElement('button');save.textContent='Download path';save.onclick=()=>download([x]);el.append(title,date,p,show,save);$('saved').append(el);});
+}
+function startView(i){if(!view)backup={rows,cols,board:[...board],path:path.map(p=>[...p]),completed,notice:$('notice').textContent};view={result:results[i],step:0};showFrame();}
+function showFrame(){rows=view.result.rows;cols=view.result.cols;blank();path=view.result.path.slice(0,view.step).map(p=>[...p]);path.forEach(([r,c])=>flip(board,rows,cols,r-1,c-1));notice('Replaying a saved path. Your current attempt will be restored when you exit replay.');render();}
+$('prev').onclick=()=>{if(view.step>0)view.step--;showFrame();};$('next').onclick=()=>{if(view.step<view.result.path.length)view.step++;showFrame();};
+$('exit').onclick=()=>{({rows,cols,board,path,completed}=backup);notice(backup.notice);view=null;backup=null;render();};
+$('size').onsubmit=e=>{e.preventDefault();rows=Number($('rows').value);cols=Number($('cols').value);blank();notice('New grid ready.');render();};
+$('undo').onclick=()=>{if(!path.length||view||completed)return;const [r,c]=path.pop();flip(board,rows,cols,r-1,c-1);notice('Last move undone.');render();};
+$('reset').onclick=()=>{blank();notice('Grid reset.');render();};
+function download(data){const blob=new Blob([JSON.stringify({version:1,rule:'Toggle union of selected row and column; intersection once',coordinates:'1-based [row, column]',results:data},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='bulb-paths-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+$('download').onclick=()=>download(results);blank();render();renderResults();if(!storageOK)notice('Browser storage is unavailable. Download your results as JSON.');
+</script>
+</html>
